@@ -1,41 +1,45 @@
 package com.lw.walker;
 
+import android.app.Dialog;
+import android.app.ProgressDialog;
+import android.content.DialogInterface;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
-import android.util.Log;
-import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.Toast;
 
 import com.baidu.mapapi.SDKInitializer;
 import com.baidu.mapapi.map.BaiduMap;
+import com.baidu.mapapi.map.MapStatusUpdate;
+import com.baidu.mapapi.map.MapStatusUpdateFactory;
 import com.baidu.mapapi.map.MapView;
+import com.baidu.mapapi.map.PolylineOptions;
+import com.baidu.mapapi.model.LatLng;
 import com.lw.walker.bean.GPXInfo;
-import com.lw.walker.bean.TRKInfo;
 import com.lw.walker.bean.TRKItem;
 import com.lw.walker.reader.GPXReader;
-import com.lw.walker.reader.RxReader;
+import com.lw.walker.reader.GPXReaderListener;
 import com.lw.walker.reader.XMLPullReader;
 
-import rx.Subscriber;
-import rx.Subscription;
-import rx.android.schedulers.AndroidSchedulers;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
-public class MainActivity extends AppCompatActivity {
+
+public class MainActivity extends AppCompatActivity implements GPXReaderListener{
 
     private static final String TAG = "MainActivity";
 
     private MapView mMapView;
 
+    private Dialog  mWaitingDialog;
 
+    private ParserThread  mParserThread;
 
-    private RxReader    mRxReader;
-
-    private Subscription    mTmpSubscription;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,26 +49,47 @@ public class MainActivity extends AppCompatActivity {
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        initReader();
         mMapView = (MapView) findViewById(R.id.map_view);
-        addRouteOverlay();
+        setRouteOverlay();
     }
 
-
-    private void addRouteOverlay(){
-
-
-
+    @Override
+    public void onError(final Throwable msg) {
+        if(msg != null){
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(MainActivity.this, msg.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
     }
 
+    private void setRouteOverlay(){
 
-    private void initReader(){
+
+        mWaitingDialog = ProgressDialog.show(this, "" , "正在解析...");
+        mWaitingDialog.setCanceledOnTouchOutside(false);
+        mWaitingDialog.setCancelable(true);
+        mWaitingDialog.setOnCancelListener(new DialogInterface.OnCancelListener() {
+            @Override
+            public void onCancel(DialogInterface dialog) {
+                if(mParserThread != null)
+                    mParserThread.interrupt();
+            }
+        });
+
         Uri file = Uri.parse("asset:///demo.gpx");
-
         GPXReader   reader = new XMLPullReader(getApplicationContext(), "utf-8");
-        mRxReader = new RxReader(reader);
-        mRxReader.setSource(file);
+        reader.addListener(this);
+        reader.setSource(file);
+
+        mParserThread = new ParserThread();
+        mParserThread.reader = reader;
+        mParserThread.start();
     }
+
+
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -99,9 +124,9 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
         mMapView.onDestroy();
 
-        if(mTmpSubscription != null){
-            mTmpSubscription.unsubscribe();
-            mTmpSubscription = null;
+        if(mParserThread != null){
+            mParserThread.interrupt();
+            mParserThread = null;
         }
     }
 
@@ -110,4 +135,56 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         mMapView.onResume();
     }
+
+    class ParserThread extends Thread{
+
+        GPXReader reader;
+
+        @Override
+        public void run() {
+
+            GPXInfo gpxInfo = reader.readGPXInfo();
+            gpxInfo.trkInfo = reader.readTRKInfo();
+
+            TRKItem item = reader.readTRKItem();
+
+            //定位到开始位置
+            if(item != null){
+                LatLng latLng = new LatLng(Double.parseDouble(item.latitude), Double.parseDouble(item.longitude));
+                BaiduMap baiduMap = mMapView.getMap();
+                MapStatusUpdate u = MapStatusUpdateFactory.newLatLngZoom(latLng, 5);//设置缩放比例
+                baiduMap.animateMapStatus(u);
+            }
+
+
+            List<LatLng> points = new ArrayList<>();
+            PolylineOptions options = new PolylineOptions()
+                    .color(Color.RED);
+
+            LatLng tmp;
+            while (item != null && !isInterrupted()){
+                tmp = new LatLng(Double.parseDouble(item.latitude)
+                    ,Double.parseDouble(item.longitude));
+                points.add(tmp);
+                item = reader.readTRKItem();
+            }
+
+            if(points.size() > 2) {
+                options.points(points);
+                mMapView.getMap().addOverlay(options);
+            }
+
+            mWaitingDialog.dismiss();
+
+            try {
+                reader.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            reader = null;
+        }
+    }
 }
+
+

@@ -31,6 +31,10 @@ public  class XMLPullReader extends AbsGPXReader {
     private Uri  mUri;
 
 
+    public XMLPullReader(Context mAppContext) {
+        this(mAppContext, "utf-8");
+    }
+
     public XMLPullReader(Context mAppContext, String mCharset) {
         this.mAppContext = mAppContext;
         this.mCharset = mCharset;
@@ -195,17 +199,22 @@ public  class XMLPullReader extends AbsGPXReader {
                 if(eventType == XmlPullParser.START_TAG){
                     tag = mParser.getName();
                     if(tag.equals("trkpt")){
-                        if(item != null)
-                            break;
-
                         item = new TRKItem();
                         item.latitude = mParser.getAttributeValue(null, "lat");
                         item.longitude = mParser.getAttributeValue(null, "lon");
 
-                    }else if(tag.equals("time")){
+                    }else if(tag.equals("time") && item != null){
                         item.time = mParser.nextText();
                     }
+                }else if(eventType == XmlPullParser.END_TAG){
+                    tag = mParser.getName();
+                    if(tag.equals("trkpt")){
+                        mParser.next();
+                        break;
+                    }
+
                 }
+
                 eventType = mParser.next();
             }
         }catch (IOException io){
