@@ -149,35 +149,32 @@ public class MainActivity extends AppCompatActivity implements GPXReaderListener
 
             GPXInfo gpxInfo = reader.readGPXInfo();
             gpxInfo.trkInfo = reader.readTRKInfo();
-
             TRKItem item = reader.readTRKItem();
 
-            //定位到开始位置
-            if(item != null){
+            List<LatLng> points = new ArrayList<>();
+            PolylineOptions options = new PolylineOptions()
+                    .color(Color.RED);
 
-                LatLng latLng = new LatLng(Double.parseDouble(item.latitude), Double.parseDouble(item.longitude));
+            LatLng tmp;
+            while (item != null && !isInterrupted()){
+                tmp = new LatLng(Double.parseDouble(item.latitude)
+                        ,Double.parseDouble(item.longitude));
+                points.add(tmp);
+                item = reader.readTRKItem();
+            }
+
+            if(points.size() > 2 && !isInterrupted()) {
+                //定位到开始位置
+                LatLng latLng = points.get(points.size() / 2);
                 BaiduMap baiduMap = mMapView.getMap();
                 MapStatusUpdate u = MapStatusUpdateFactory.newLatLngZoom(latLng, 5);//设置缩放比例
                 baiduMap.animateMapStatus(u);
 
-                List<LatLng> points = new ArrayList<>();
-                PolylineOptions options = new PolylineOptions()
-                        .color(Color.RED);
-
-                LatLng tmp;
-                while (item != null && !isInterrupted()){
-                    tmp = new LatLng(Double.parseDouble(item.latitude)
-                            ,Double.parseDouble(item.longitude));
-                    points.add(tmp);
-                    item = reader.readTRKItem();
-                }
-
-                if(points.size() > 2) {
-                    options.points(points);
-                    mMapView.getMap().addOverlay(options);
-                }
-
+                options.points(points);
+                mMapView.getMap().addOverlay(options);
             }
+
+
 
 
             mWaitingDialog.dismiss();
