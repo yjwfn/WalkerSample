@@ -62,7 +62,11 @@ public class MainActivity extends AppCompatActivity implements GPXReaderListener
                     Toast.makeText(MainActivity.this, msg.getMessage(), Toast.LENGTH_SHORT).show();
                 }
             });
+
+            msg.printStackTrace();
         }
+
+
     }
 
     private void setRouteOverlay(){
@@ -150,32 +154,33 @@ public class MainActivity extends AppCompatActivity implements GPXReaderListener
 
             //定位到开始位置
             if(item != null){
+
                 LatLng latLng = new LatLng(Double.parseDouble(item.latitude), Double.parseDouble(item.longitude));
                 BaiduMap baiduMap = mMapView.getMap();
                 MapStatusUpdate u = MapStatusUpdateFactory.newLatLngZoom(latLng, 5);//设置缩放比例
                 baiduMap.animateMapStatus(u);
+
+                List<LatLng> points = new ArrayList<>();
+                PolylineOptions options = new PolylineOptions()
+                        .color(Color.RED);
+
+                LatLng tmp;
+                while (item != null && !isInterrupted()){
+                    tmp = new LatLng(Double.parseDouble(item.latitude)
+                            ,Double.parseDouble(item.longitude));
+                    points.add(tmp);
+                    item = reader.readTRKItem();
+                }
+
+                if(points.size() > 2) {
+                    options.points(points);
+                    mMapView.getMap().addOverlay(options);
+                }
+
             }
 
-
-            List<LatLng> points = new ArrayList<>();
-            PolylineOptions options = new PolylineOptions()
-                    .color(Color.RED);
-
-            LatLng tmp;
-            while (item != null && !isInterrupted()){
-                tmp = new LatLng(Double.parseDouble(item.latitude)
-                    ,Double.parseDouble(item.longitude));
-                points.add(tmp);
-                item = reader.readTRKItem();
-            }
-
-            if(points.size() > 2) {
-                options.points(points);
-                mMapView.getMap().addOverlay(options);
-            }
 
             mWaitingDialog.dismiss();
-
             try {
                 reader.close();
             } catch (IOException e) {
